@@ -24,7 +24,7 @@ data.test <- as.data.frame(data[15,])
 data.cleaned = select(data.train, -Geolocation, -Location)
 data.cleaned = filter(data.cleaned, data.cleaned$State == "MD")
 
-summary(data.cleaned)
+# summary(data.cleaned)
 
 coords = select(data.cleaned, Latitude, Longitude)
 coords = mutate(coords, count = 1)
