@@ -32,4 +32,7 @@ data = select(data, -Fatal, -HAZMAT, -Charge, -Article)
 data$Local <- ifelse(data$Driver.State == "MD", TRUE, FALSE)
 data = select(data, -Driver.State) # Remove Driver.State
 
+# Add a column to see at which weekday the violation occured
+data = mutate(data, weekDay = paste( wday(as.Date(trafficData$Date.Of.Stop, format = "%m/%d/%Y"), label = TRUE)  ))
+
 #---------- END DATA PREPARATION ----------#
