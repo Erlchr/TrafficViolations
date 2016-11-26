@@ -35,8 +35,8 @@ data = filter(data, !is.na(data$Latitude), !is.na(data$Longitude))
 data$Local <- ifelse(data$Driver.State == "MD", TRUE, FALSE)
 data = select(data, -Driver.State) # Remove Driver.State
 
-<<<<<<< HEAD
 #---------- END DATA PREPARATION ----------#
+
 #---------- START DATA VISUALIZATION ----------#
 
 # Traffic Violation Hotspots Analysis using raster package
@@ -73,8 +73,6 @@ plot(r.rasterized) # breaks = breakpoints, col = colors)
 plot(maryland, add = TRUE)
 dev.off()
 
-#---------- END DATA VISUALIZATION ----------#
-=======
 # Add a column to see at which weekday the violation occured
 data = mutate(data, weekDay = paste( wday(as.Date(data$Date.Of.Stop, format = "%m/%d/%Y"), label = TRUE)  ))
 
@@ -92,5 +90,4 @@ data = mutate(data, timeInterval = paste (assignedInterval))
 freq_timeInteravl <- data.frame(table(data$timeInterval))
 plot(freq_timeInteravl, type="l", xlab="Time Interval", ylab="Frequency")
 
-#---------- END DATA PREPARATION ----------#
->>>>>>> e634bce1055faddbb0b1c2cc3bc0be7dbb7c1ce2
+#---------- END DATA VISUALIZATION ----------#
