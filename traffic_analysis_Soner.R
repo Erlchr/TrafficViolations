@@ -7,7 +7,7 @@ data <- read.csv("/Users/sonerercelik/Desktop/E-Business/Traffic_Violations.csv"
 ########################### Start - Von Master eingefügt:
 
 # Remove redundant location information
-data = select(data.raw, -Location, -Geolocation) 
+data = select(data, -Location, -Geolocation) 
 
 # Remove columns which has always the same value like "Agency = MCP" in each row of data
 data = select(data, -Agency, -Accident, -Commercial.Vehicle)
@@ -22,7 +22,7 @@ data = select(data, -Driver.State) # Remove Driver.State
 
 ############################# End
 
-############################# Start - Own Work
+#------------- Start - Own Work -----------------#
 # Add column with weekdays
 data = mutate(data, weekDay = paste( wday(as.Date(data$Date.Of.Stop, format = "%m/%d/%Y"), label = TRUE)  ))
 
@@ -37,6 +37,8 @@ assignedInterval = labs[findInterval(convertedInSecTimeIntervall, cuts)]
 # Add column time intervall 
 data = mutate(data, timeInterval = paste (assignedInterval))
 
+
+#------------- Bar Plots - Start ---------------------#
 # Create plot how often a traffic violation occurs depending on time interval
 barplot(table(data$timeInterval),col="slategray2",border="black",
         xlab="Time Interval",
@@ -52,6 +54,69 @@ barplot(table(data$weekDay),col="slategray2",border="black",
         ylim=c(0,30000)
         )
 
+# Create plot how often a traffic violation occurs depending on model year of the car
+data = filter(data, Year < 2017)
+data = filter(data, Year > 1995)
+
+barplot(table(data$Year),col="slategray2",border="black",
+        xlab="Year of the car",
+        ylab="Frequency of Traffic Violations",
+        ylim=c(0,10000)
+)
+
+table(data$Belts)
+table(data$Personal.Injury)
+table(data$Contributed.To.Accident)
+
+# Gurtverstoß und Körperverletzung und daraus resultierender Unfall -> 183 times
+new_data <- filter(data, Belts == 'Yes', Personal.Injury=='Yes', Contributed.To.Accident=='Yes') 
+
+# Gurtverstoß und keine Körperverletzung und daraus kein resultierender Unfall -> 4335 times
+new_data <- filter(data, Belts == 'Yes', Personal.Injury=='No', Contributed.To.Accident=='No') 
+
+# Gurtverstoß und keine Körperverletzung und daraus resultierender Unfall -> 248 times
+new_data <- filter(data, Belts == 'Yes', Personal.Injury=='No', Contributed.To.Accident=='Yes') 
+
+# Kein Gurtverstoß und Körperverletzung und daraus resultierender Unfall -> 816 times
+new_data <- filter(data, Belts == 'No', Personal.Injury=='Yes', Contributed.To.Accident=='Yes') 
+
+# Kein Gurtverstoß und keine Körperverletzung aber daraus resultierender Unfall -> 2498 times
+new_data <- filter(data, Belts == 'No', Personal.Injury=='No', Contributed.To.Accident=='Yes' )
+
+# Gurtverstoß und Körperverletzung und kein Unfall -> 192 times
+new_data <- filter(data, Belts == 'Yes', Personal.Injury=='Yes', Contributed.To.Accident=='No')
+
+# Gurtverstoß und Körperverletzung -> 375 times
+new_data <- filter(data, Belts == 'Yes', Personal.Injury=='Yes')
+
+# Gurtverstoß und keine Körperverletzung -> 4583 times
+new_data <- filter(data, Belts == 'Yes', Personal.Injury=='No') 
+
+# kein Gurtverstoß und keine Körperverletzung -> 134548 times
+new_data <- filter(data, Belts == 'No', Personal.Injury =='No')
+
+# kein Gurtverstoß und Körperverletzung -> 1461 times
+new_data <- filter(data, Belts == 'No', Personal.Injury =='Yes') #
+
+
+# Summary:
+# Kein Gurtverstoß, Unfall, keine Körperverletzung  -> 2498 times
+# Kein Gurtverstoß, Unfall, Körperverletzung        ->  816 times
+# Gurtverstoß, Unfall, keine Körperverletzung       ->  248 times
+# Gurtverstoß, Unfall, Körperverletzung             ->  183 times
+# Gurtverstoß, kein Unfall, keine Körperverletzung  -> 4335 times
+# Gurtverstoß, kein Unfall, Körperverletzung        ->  192 times
+
+# Gurtverstoß und Körperverletzung                  ->  375 times = T-TEST
+# kein Gurtverstoß und Körperverletzung             -> 1461 times
+
+# Gurtverstoß und keine Körperverletzung            ->   4583 times
+# kein Gurtverstoß und keine Körperverletzung       -> 134548 times
+
+
+
+
+#------------- End - Own Work -----------------#
 
 
 # TESTING not important:
@@ -83,7 +148,6 @@ freq_timeInterval
 str(freq_timeInterval)
 
 #################################
-# TO INSERT IN MASTER
 
 
 
