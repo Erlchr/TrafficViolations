@@ -35,7 +35,7 @@ labs <- c("00:00 - 02:59", "03:00 - 05:59", "06:00 - 08:59", "09:00 - 11:59", "1
 assignedInterval = labs[findInterval(convertedInSecTimeIntervall, cuts)]
 
 # Add column time intervall 
-data = mutate(data, timeInterval = paste (assignedInterval))
+data = mutate(data, TimeInterval = paste (assignedInterval))
 
 
 #------------- Bar Plots - Start ---------------------#
@@ -55,10 +55,10 @@ barplot(table(data$weekDay),col="slategray2",border="black",
         )
 
 # Create plot how often a traffic violation occurs depending on model year of the car
-data = filter(data, Year < 2017)
-data = filter(data, Year > 1995)
+dataFiltered = filter(data, Year < 2017)
+dataFiltered = filter(dataFiltered, Year > 1995)
 
-barplot(table(data$Year),col="slategray2",border="black",
+barplot(table(dataFiltered$Year),col="slategray2",border="black",
         xlab="Year of the car",
         ylab="Frequency of Traffic Violations",
         ylim=c(0,10000)
@@ -113,11 +113,17 @@ new_data <- filter(data, Belts == 'No', Personal.Injury =='Yes') #
 # Gurtverstoß und keine Körperverletzung            ->   4583 times
 # kein Gurtverstoß und keine Körperverletzung       -> 134548 times
 
+# Add column 'Citation' if the car driver get a citation: 
+data = mutate(data, Citation = paste (ifelse(Violation.Type=='Citation', TRUE, FALSE)))
 
+data = filter(data, Year < 2017)
+data = filter(data, Year > 1930)
+mean(data$Year)
 
+# Add column 'OldCar': <= 2007
+data = mutate(data, OldCar = paste (ifelse(Year <= 2007, TRUE, FALSE)))
 
 #------------- End - Own Work -----------------#
-
 
 # TESTING not important:
 
