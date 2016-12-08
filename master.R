@@ -194,7 +194,7 @@ data$Personal.Injury <- ifelse(data$Personal.Injury == "Yes", 1, 0)
 data$Property.Damage <- ifelse(data$Property.Damage == "Yes", 1, 0)
 data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
 data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
-data$SexMale <- ifelse(data$Gender == "M", 1, 0)
+data$Gender_Num <- ifelse(data$Gender == "M", 1, 0)
 
 data$Citation_Num <- ifelse(data$Violation.Type == "Yes", 1, 0)
 
@@ -266,5 +266,10 @@ barplot(table(dataFiltered$Year),col="slategray2",border="black",
 
 
 #---------- END DATA PREPARATION ----------#
+#---------- START DATA VISUALIZATION ----------#
+#---------- END DATA VISUALIZATION ----------#
+
+#---------- START DATA VISUALIZATION ----------#
+#---------- END DATA VISUALIZATION ----------#
 
 
