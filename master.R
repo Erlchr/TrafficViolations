@@ -190,10 +190,9 @@ data = filter(data, !is.na(data$Latitude), !is.na(data$Longitude))
 
 # Update column "Violation.Type" to see if the driver is a local or a tourist
 data$Violation.Type <- ifelse(data$Violation.Type == "Citation", "Yes", "No")
-data$Personal.Injury <- ifelse(data$Personal.Injury == "Yes", 1, 0)
-data$Property.Damage <- ifelse(data$Property.Damage == "Yes", 1, 0)
-data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
-data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
+data$Personal.Injury_Num <- ifelse(data$Personal.Injury == "Yes", 1, 0)
+data$Property.Damage_Num <- ifelse(data$Property.Damage == "Yes", 1, 0)
+data$Contributed.To.Accident_Num <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
 data$Gender_Num <- ifelse(data$Gender == "M", 0, 1)
 
 data$Citation_Num <- ifelse(data$Violation.Type == "Yes", 1, 0)
@@ -224,18 +223,10 @@ data$Citation = as.factor(data$Citation)
 data$Interval_Num = as.numeric(data$Interval)
 data$Day_Num = as.numeric(data$Day)
 
-#------- START SONER --------#
-#1: Split "data" into training_data and test_data:
-set.seed(107)
-inTrain <- createDataPartition(y = data$Citation, p = .9, list = FALSE)
+#---------- END DATA PREPARATION ----------#
+#---------- START DATA VISUALIZATION ----------#
 
-training_data <- data[ inTrain,] ## 90% of original data
-test_data  <- data[-inTrain,]
-
-#2: 
-#------------- START Bar Plots ---------------------#
-# Create plot how often a traffic violation occurs depending on time interval
-barplot(table(training_data$Interval),col="slategray2",border="black",
+barplot(table(data$Interval),col="slategray2",border="black",
         xlab="Time Interval",
         ylab="Frequency of Traffic Violations",
         ylim=c(0,50000)
@@ -243,7 +234,7 @@ barplot(table(training_data$Interval),col="slategray2",border="black",
 legend("top", legend = c("0 = 12am - 5.59am", "1 = 6am - 11.59am", "2 = 12pm - 5.59pm", "3 = 6pm - 11:59pm"))
 
 # Create plot how often a traffic violation occurs depending on weekday
-barplot(table(training_data$Day),col="slategray2",border="black",
+barplot(table(data$Day),col="slategray2",border="black",
         xlab="Weekday",
         ylab="Frequency of Traffic Violations",
         ylim=c(0,30000)
@@ -251,25 +242,24 @@ barplot(table(training_data$Day),col="slategray2",border="black",
 legend("top", legend = c("0 = Sun, 1 = Mon, 2 = Tues, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat"))
 
 # Create plot how often a traffic violation occurs depending on model year of the car
-dataFiltered = filter(training_data, training_data$Year < 2017)
+dataFiltered = filter(data, data$Year < 2017)
 dataFiltered = filter(dataFiltered, dataFiltered$Year > 1995)
 barplot(table(dataFiltered$Year),col="slategray2",border="black",
         xlab="Year of the car",
         ylab="Frequency of Traffic Violations",
-        ylim=c(0,10000)
-)
-#------------- END Bar Plots ---------------------#
+        ylim=c(0,10000))
 
-#------- END SONER --------#
-
-
-
-
-#---------- END DATA PREPARATION ----------#
-#---------- START DATA VISUALIZATION ----------#
 #---------- END DATA VISUALIZATION ----------#
 
-#---------- START DATA VISUALIZATION ----------#
-#---------- END DATA VISUALIZATION ----------#
+#---------- START MODEL PLANNING ----------#
+
+#1: Split data into training_data and test_data:
+set.seed(107)
+inTrain <- createDataPartition(y = data$Citation, p = .9, list = FALSE)
+
+training_data <- data[ inTrain,] ## 90% of original data
+test_data  <- data[-inTrain,]
+
+#---------- END MODEL PLANNING ----------#
 
 
