@@ -10,6 +10,7 @@ library(ggplot2)
 library(utils)
 library(lubridate)
 library(chron) # Date
+library(caret)
 
 #---------- START HELPER METHODS ----------#
 
@@ -82,15 +83,6 @@ data = select(data, -Commercial.License, -Work.Zone, -State, -Model, -DL.State)
 data = select(data, -Fatal, -HAZMAT, -Charge, -Article)
 data = select(data, -SubAgency, -Alcohol, -Driver.City, -Arrest.Type, -Driver.State)
 data = select(data, -Belts)
-
-# Remove all rows where value of the "YEAR" is not between 1950-2017
-data = filter(data, data$Year > 1950 & data$Year < 2017)
-
-# Remove NA coordinates rows 
-data = filter(data, !is.na(data$Latitude), !is.na(data$Longitude))
-
-# Update column "Violation.Type" to see if the driver is a local or a tourist
-data$Violation.Type <- ifelse(data$Violation.Type == "Citation", 1, 0)
 
 # Update Vehicle Type
 data$VehicleType = as.character(data$VehicleType)
@@ -173,8 +165,56 @@ makes <- c("ACURA", "ASTON MARTIN", "AUDI", "BENTLEY", "BENZ", "BMW", "CADILLAC"
            "SUBARU", "SUZUKI", "TESLA", "TOYOTA", "VOLKSWAGEN", "VOLVO", "YAMAHA")
 data$Make = as.factor(makes[amatch(as.character(data$Make), makes, maxDist = 2)])
 
+
+
+
+# Remove all rows where value of the "YEAR" is not between 1950-2017
+data = filter(data, data$Year > 1950 & data$Year < 2017)
+# Remove all rows where value of "Gender" is "U"
+data = filter(data, data$Gender == "F" | data$Gender == "M")
+# Remove all rows where value of "Color" is "Other"
+data = filter(data, !(data$Color == "Other"))
+# Reset factor levels to delete unused factors like "Other" in Color and "U" in Gender
+data$Color <- factor(data$Color)
+data$Gender <- factor(data$Gender)
+
+# Remove NA coordinates rows 
+data = filter(data, !is.na(data$Latitude), !is.na(data$Longitude))
+
+# Update column "Violation.Type" to see if the driver is a local or a tourist
+data$Violation.Type <- ifelse(data$Violation.Type == "Citation", "Yes", "No")
+data$Personal.Injury <- ifelse(data$Personal.Injury == "Yes", 1, 0)
+data$Property.Damage <- ifelse(data$Property.Damage == "Yes", 1, 0)
+data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
+data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
+data$SexMale <- ifelse(data$Gender == "M", 1, 0)
+
+data$Citation_Num <- ifelse(data$Violation.Type == "Yes", 1, 0)
+
+data$Color_Num <- ifelse(data$Color == "White", 1,
+                         ifelse(data$Color == "Gray", 2,
+                                ifelse(data$Color == "Black", 3, 4)))
+
+data$VehicleType_Num <- ifelse(data$VehicleType == "Motorcycle", 1,
+                               ifelse(data$VehicleType == "Automobile", 2,
+                                      ifelse(data$VehicleType == "Truck", 3, 4)))
+
+data$Race_Num <- ifelse(data$Race == "ASIAN", 1,
+                        ifelse(data$Race == "BLACK", 2,
+                               ifelse(data$Race == "WHITE", 3,
+                                      ifelse(data$Race == "HISPANIC", 4, 5))))
+
+
+ranks <- rank(-table(data$Make), ties.method="first")
+data$Make_Num <- ranks[as.character(data$Make)]
+
+
+
 # Rename Columns
 names(data)[names(data) == "Violation.Type"] = "Citation"
+
+data$Interval_Num = as.numeric(data$Interval)
+data$Day_Num = as.numeric(data$Day)
 
 #---------- END DATA PREPARATION ----------#
 
