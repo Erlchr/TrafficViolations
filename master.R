@@ -194,7 +194,7 @@ data$Personal.Injury <- ifelse(data$Personal.Injury == "Yes", 1, 0)
 data$Property.Damage <- ifelse(data$Property.Damage == "Yes", 1, 0)
 data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
 data$Contributed.To.Accident <- ifelse(data$Contributed.To.Accident == "Yes", 1, 0)
-data$Gender_Num <- ifelse(data$Gender == "M", 1, 0)
+data$Gender_Num <- ifelse(data$Gender == "M", 0, 1)
 
 data$Citation_Num <- ifelse(data$Violation.Type == "Yes", 1, 0)
 
