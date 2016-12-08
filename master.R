@@ -212,6 +212,7 @@ data$Make_Num <- ranks[as.character(data$Make)]
 
 # Rename Columns
 names(data)[names(data) == "Violation.Type"] = "Citation"
+data$Citation = as.factor(data$Citation)
 
 data$Interval_Num = as.numeric(data$Interval)
 data$Day_Num = as.numeric(data$Day)
