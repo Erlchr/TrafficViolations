@@ -4,12 +4,19 @@ install_version("ggplot2", version = "2.1.0", repos = "http://cran.us.r-project.
 
 library(sp)
 library(raster)
-library(dplyr)
+library(dplyr) 
+select <- dplyr:: select
 library(ggmap)
 library(ggplot2)
 library(utils)
 library(lubridate)
 library(chron) # Date
+library(caret)
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(stringdist)
+library(lattice)
 library(caret)
 
 #---------- START HELPER METHODS ----------#
