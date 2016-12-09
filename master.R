@@ -397,11 +397,30 @@ inTrain <- createDataPartition(y = data$Citation, p = .9, list = FALSE)
 training_data <- data[ inTrain,] ## 90% of original data
 test_data  <- data[-inTrain,]
 
-model_glm <- train (Citation ~ Category, data = training_data, method = "glm")
-model_glm
-data_prediction <- predict(model_glm, test_data)
-confusionMatrix(data_prediction, test_data$Citation)
+model = Citation ~ Category + HighProb
+model_glm <- train (model, data = training_data, method = "glm")
+model_rf <- train (model, data = training_data, method = "rf")
+model_svm <- train (model, data = training_data, method = "svmRadial")
+model_tree <- train (model, data = training_data, method = "class")
 
 #---------- END MODEL PLANNING ----------#
 
+saveRDS(model_glm, "model_glm.rds")
+saveRDS(model_rf, "model_rf.rds")
+saveRDS(model_svm, "model_svm.rds")
+saveRDS(model_tree, "model_tree.rds")
 
+model_glm <- readRDS("model_glm.rds")
+model_rf <- readRDS("model_rf.rds")
+model_svm <- readRDS("model_svm.rds")
+model_tree <- readRDS("model_tree.rds")
+
+prediction_glm = predict(model_glm, test_data)
+prediction_rf = predict(model_rf, test_data)
+prediction_svm = predict(model_svm, test_data)
+prediction_tree = predict(model_tree, test_data)
+
+confusionMatrix(prediction_glm, test_data$Citation)
+confusionMatrix(prediction_rf, test_data$Citation)
+confusionMatrix(prediction_svm, test_data$Citation)
+confusionMatrix(prediction_tree, test_data$Citation)
