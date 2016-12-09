@@ -1,53 +1,70 @@
 library(kernlab)
 library(caret)
 library(dplyr)
-
-#---------- START READING DATA ----------#
-
-# File Names
-dataCSVFileName = "traffic_violations.csv"
-dataRDSFileName = "traffic_violations.rds"
-
-# Save CSV as Binary
-if(!file.exists(dataRDSFileName)) {
-  dataCSV = read.csv(dataCSVFileName)
-  saveRDS(dataCSV, dataRDSFileName)
-}
-
-# Read Data
-data.raw = readRDS(dataRDSFileName)
-
-#---------- END READING DATA ----------#
-#---------- START DATA PREPARATION ----------#
-
-# Remove redundant location information
-data = select(data.raw, -Location, -Geolocation) 
-
-# Remove columns which has always the same value like "Agency = MCP" in each row of data
-data = select(data, -Agency, -Accident, -Commercial.Vehicle)
-
-# Remove irrelevant/unnecessary columns for analysis
-data = select(data, -Commercial.License, -Work.Zone, -State, -Model, -Color, -DL.State)
-data = select(data, -Fatal, -HAZMAT, -Charge, -Article)
-
-# Remove NA coordinates rows 
-data = filter(data, !is.na(data$Latitude), !is.na(data$Longitude))
-
-# Add a column "Local" to see if the driver is a local or a tourist
-data$Local <- ifelse(data$Driver.State == "MD", TRUE, FALSE)
-data = select(data, -Driver.State) # Remove Driver.State
-
-# Update column "Violation.Type " to see if the driver is a local or a tourist
-data$Local <- ifelse(data$Violation.Type == "Citation", TRUE, FALSE)
-
-#---------- END DATA PREPARATION ----------#
-#---------- START CREATE TEST AND TRAINING ----------#
-
-data_train <- data[1:110000,]
-data_test  <- data[110001:138000,]
+library("doParallel")
 
 #---------- END CREATE TEST AND TRAINING ----------#
 
-letter_classifier <- ksvm(letter ~ ., data = letters_train,
+data_classifier <- ksvm(Citation ~ Race + Gender, data = training_data,
                           kernel = "vanilladot")
 
+data_predictions <- predict(data_classifier, test_data)
+
+#head(data_predictions)
+#table(data_predictions, test_data$Citation)
+
+#agreement <- data_predictions == test_data$Citation
+#table(agreement)
+#prop.table(table(agreement))
+
+#use caret confusion matrix
+confusionMatrix(data_predictions,test_data$Citation) #83.9% AVG Accuracy
+
+#Register core backend, using 4 cores
+cl <- makeCluster(4)
+registerDoParallel(cl)
+
+#list number of workers
+getDoParWorkers()
+
+#purposely using too small number of folds to reduce computation time, use 10 fold 
+#and repeats
+ctrl <- trainControl(method="cv",number=2,
+                     classProbs=TRUE,
+                     #function used to measure performance
+                     summaryFunction = multiClassSummary, 
+                     allowParallel = TRUE) #default looks for parallel backend
+
+##svm with radial kernel
+modelLookup("svmRadial")
+m.svm <- train(Citation ~ Race + Gender, 
+               trControl = ctrl,
+               metric = "Accuracy", #using AUC to find best performing parameters
+               preProc = c("range"), #scale from 0 to 1
+               data = training_data, 
+               method = "svmRadial")
+
+#save train model to file to avoid very lengthy train time
+saveRDS(m.svm, "letermodel-svmRadialCaretTrain.rds")
+
+#read train model from file
+m.svm<-readRDS("letermodel-svmRadialCaretTrain.rds")
+
+plot(m.svm)
+
+
+# Random
+modelLookup("rf")
+
+randomForest <- train(Citation ~ Race + Gender, 
+                      # trControl = ctrl,
+                      metric = "Accuracy", #using AUC to find best performing parameters
+                      # preProc = c("range"), #scale from 0 to 1
+                      data = training_data, 
+                      method = "rf")
+
+stopCluster(cl)
+
+
+
+# 0.3: 70,72%

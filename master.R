@@ -38,9 +38,35 @@ if(!file.exists(dataRDSFileName)) {
 data.raw = readRDS(dataRDSFileName)
 
 #---------- END READING DATA ----------#
+
+#---------- START HELPER METHODS ----------#
+
+preparePolygon <- function(x) {
+  rtp <- rasterToPolygons(x)
+  rtp@data$id <- 1:nrow(rtp@data) # add id column for join
+  
+  rtpFort <- fortify(rtp, data = rtp@data)
+  rtpFortMer <- merge(rtpFort, rtp@data, by.x = 'id', by.y = 'id')  # join data
+  
+  return(rtpFortMer)
+}
+
+create_map <- function(location = "Montgomery County", zoom = 10, show.border = TRUE) {
+  montgomery = ggmap(get_map(location = location, maptype = "terrain", zoom = zoom), extent = "device")
+  
+  if (show.border) { 
+    maryland = subset(getData("GADM", country="USA", level=2), NAME_1 == "Maryland")
+    montgomery = montgomery + geom_polygon(data=maryland, aes(x=long, y=lat), alpha = 0.1, fill = NA, color = "black") 
+  }
+  
+  return(montgomery)
+}
+
+#---------- END HELPER METHODS ----------#
 #---------- START DATA PREPARATION ----------#
 data = data.raw
 
+### Add, Update & Remove Variables
 # Add Day & Interval
 seconds = minutes(times(data$Time.Of.Stop)) * 60 + hours(times(data$Time.Of.Stop)) * 60 * 60
 cuts <- c(-Inf, 6 * 60 * 60, 21600 * 2, 21600 * 3, Inf)
@@ -55,7 +81,7 @@ data = mutate(data, Day = paste( wday(as.Date(data$Date.Of.Stop, format = "%m/%d
 data$Day <- factor(data$Day, levels= c(0,1,2,3,4,5,6))
 
 # Add Category
-categories = c("Speed", "Red Lights", "License", "Registration", "Driving Failure", "Alcohol", "Electronic Device", "Unsafe Vehicle")
+categories = c("Speed", "Red Lights", "License", "Registration", "Driving Failure", "Alcohol", "Electronic Device", "Unsafe Vehicle", "Wrong Way")
 data = mutate(data, Category = as.character(data$Description))  
 
 data$Category = gsub("LIC.", "LICENSE", data$Category)
@@ -69,12 +95,14 @@ data$Category = gsub("MSG.", "MESSAGE", data$Category)
 data$Category = gsub("PLATES", "PLATE", data$Category)
 
 data$Category = gsub(".*SPEED.*", "Speed", data$Category)
-data$Category = gsub(".*(RED LIGHTS|RED SIGNAL|RED TRAFFIC SIGNAL|STOP LIGHTS|FAILURE TO STOP|STOPLIGHT|STOP AT  SIGN|REQUIRED STOP|STOP SIGN|STOP AT SIGN|RED ARROW).*", "Red Lights", data$Category)
+data$Category = gsub(".*(ONE WAY|WRONG WAY).*", "Wrong Way", data$Category)
+data$Category = gsub(".*(RED LIGHTS|RED SIGNAL|RED TRAFFIC SIGNAL|STOP LIGHTS|FAILURE TO STOP|STOPLIGHT|STOP AT SIGN|REQUIRED STOP|STOP SIGN|STOP AT SIGN|RED ARROW).*", "Red Lights", data$Category)
 data$Category = gsub(".*(LICENSE|PERMIT DRIVING|UNAUTHORIZED).*", "License", data$Category)
 data$Category = gsub(".*(REGISTRATION|UNREGISTERED|PLATE).*", "Registration", data$Category)
-data$Category = gsub(".*(AGGRESSIVE|NEGLIGENT|RECKLESS|TURN|BACKING|IMPRUDENT|PEDESTRIAN|SOUND|NOIS(E|Y)|FAILURE OF DRIVER|DRIVER (FAILING|FAILURE)|VEHICLE.*TOO CLOSELY|OVERTAKEN|OFF ROADWAY|ONE WAY|WRONG WAY|CARELESS|YIELD|LANE|IMPROPER ROAD POSITION|DRIVE RIGHT|YIELD RIGHT|RIGHT HALF|FOLLOWING VEHICLE CLOSER|PARKING|PARK).*", "Driving Failure", data$Category)
+data$Category = gsub(".*(AGGRESSIVE|NEGLIGENT|RECKLESS|TURN|BACKING|IMPRUDENT|PEDESTRIAN|SOUND|NOIS(E|Y)|FAILURE OF DRIVER|DRIVER (FAILING|FAILURE)|VEHICLE.*TOO CLOSELY|OVERTAKEN|OFF ROADWAY|CARELESS|YIELD|LANE|IMPROPER ROAD POSITION|DRIVE RIGHT|YIELD RIGHT|RIGHT HALF|FOLLOWING VEHICLE CLOSER|PARKING|PARK).*", "Driving Failure", data$Category)
 data$Category = gsub(".*(ALCOHOL|DRUG).*", "Alcohol", data$Category)
-data$Category = gsub(".*(TELEPHONE|EARPHONES|EARPLUGS|PHONE|(READING|WRITING) .* MESSAGE|HEADSET).*", "Electronic Device", data$Category)
+data$Category = gsub(".*(TELEPHONE|PHONE|(READING|WRITING) .* MESSAGE).*", "Electronic Device", data$Category)
+# data$Category = gsub(".*(TELEPHONE|EARPHONES|EARPLUGS|PHONE|(READING|WRITING) .* MESSAGE|HEADSET).*", "Electronic Device", data$Category)
 data$Category = gsub(".*(GLASS|LAMP|BELT|UNINSURED VEHICLE|LAMPS|HEADLIGHT|SUSPENSION|TAILLIGHT|DASH LIGHTS|EYE PROTECTION|SHOCKS|WHEEL|TURN SIGNALS|WINDSHIELD|UNSECURED LOADED VEHICLE|EXHAUST SYSTEM|WINDOW TINT|FAILURE OF VEHICLE|TIRES|MIRRORS|FENDERS|BUMPERS|HEADLIGHTS|BRAKING|REFLECTOR|UNSAFE VEHICLE|EQUIPMENT|TAG LIGHTS|TAILLIGHTS|EQUIP|BRAKE).*", "Unsafe Vehicle", data$Category)
 
 data$Category = as.factor(ifelse(data$Category %in% categories, data$Category, "Other"))
@@ -223,6 +251,76 @@ data$Citation = as.factor(data$Citation)
 data$Interval_Num = as.numeric(data$Interval)
 data$Day_Num = as.numeric(data$Day)
 
+### Traffic Violation Hotspots Analysis
+# Create Frame with Latitude & Longitude
+coords = select(data, Latitude, Longitude); coords = coords[,2:1]
+
+# Traffic Violation Hotspots Analysis using kmeans clustering
+# 1) Find optimal k
+# 2) Execute kmeans algorithm
+# 3) Create lookup table to convert cluster numbers to locality names, and override afterwards
+# 4) Visualize & save Montgomery map, violation points and clusters
+# 5) Add cluster to frame 
+hotspot.wss <- numeric(15) 
+for (k in 1:15) hotspot.wss[k] <- sum(kmeans(coords, centers=k)$withinss)
+plot(hotspot.wss)
+
+hotspot.kmeans          = kmeans(coords[,1:2], 6)
+hotspot.lookup          = mutate(as.data.frame(hotspot.kmeans$centers), Location = as.factor(apply(hotspot.kmeans$centers, 1, function(v) revgeocode(v, output = "more")$locality)))
+hotspot.kmeans$cluster  = sapply(hotspot.kmeans$cluster, function(v) hotspot.lookup[v,]$Location)
+hotspot.centers         = as.data.frame(hotspot.kmeans$centers)
+
+hotspots.map = create_map() +
+  geom_point(coords, mapping=aes(x=Longitude, y=Latitude, color=hotspot.kmeans$cluster), size=1) + 
+  geom_point(hotspot.centers, mapping=aes(x=Longitude, y=Latitude), size=2) +
+  geom_point(hotspot.centers, mapping=aes(x=Longitude, y=Latitude), size=10, alpha=0.3) + 
+  labs(colour="Hotspots")
+hotspots.map
+ggsave(hotspots.map, file = "figures/map_hotspots.png", width = 10, height = 8)
+
+data$Cluster = hotspot.kmeans$cluster
+coords$Cluster = hotspot.kmeans$cluster
+coords$Citation = data$Citation
+
+# Traffic Violation Hotspots Analysis using raster package
+# 1) Create Frame with Latitude & Longitude & Count (=1, needed for sum up)
+# 2) Create Raster and rasterize the created Frame
+# 3) Add Maryland Border Layer 
+# 4) Plot
+rastered = raster(ncol=100, nrow=100, xmn=-77.52, xmx=-76.9, ymn=38.93, ymx=39.35)
+
+rasterized = rasterize(coords[,1:2], rastered, 1, fun = sum)
+rasterized.prob = rasterize(coords[,1:2], rastered, ifelse(coords$Citation == "Yes", 1, 0) , fun = sum)
+values(rasterized.prob) = values(rasterized.prob) / values(rasterized)
+
+data$prob = values(rasterized.prob)[cellFromXY(rasterized.prob, coords[,1:2])]
+data$prob[is.na(data$prob)] = 0
+data$HighProb = ifelse(data$prob > 0.45, TRUE, FALSE)
+
+
+# Map
+rasterized.map = create_map() 
+  # scale_fill_continuous(guide = "legend", limits = c(min(values(rasterized), na.rm = T), max(values(rasterized), na.rm = T)), low = "red1", high = "red4")
+  #scale_fill_continuous(guide = "legend", limits = c(min(values(rasterized), na.rm = T), max(values(rasterized), na.rm = T)), low = "red1", high = "red4")
+
+if(TRUE) { rasterized.map = rasterized.map + geom_polygon(data=preparePolygon(rasterized), aes(x = long, y = lat, group = group, fill = layer)) }
+if(TRUE) { rasterized.map = rasterized.map + geom_line(data=preparePolygon(rastered), aes(x = long, y = lat, group = group), color = "gray47", size = 0.2) }
+
+rasterized.map = rasterized.map + scale_colour_gradient(trans = "log", limits = c(mean(values(rasterized), na.rm = T), max(values(rasterized), na.rm = T)), low = "red1", high = "red4")
+ggsave(rasterized.map, file = "figures/map_rasterized.png", width = 10, height = 8)
+
+# Map
+rasterized.prob.map = create_map() +
+  scale_fill_continuous(guide = "legend", limits = c(min(values(rasterized.prob), na.rm = T), max(values(rasterized.prob), na.rm = T)), low = "red1", high = "red4")
+
+if(TRUE) { rasterized.prob.map = rasterized.prob.map + geom_polygon(data=preparePolygon(rasterized.prob), aes(x = long, y = lat, group = group, fill = layer)) }
+if(TRUE) { rasterized.prob.map = rasterized.prob.map + geom_line(data=preparePolygon(rasterized.prob), aes(x = long, y = lat, group = group), color = "gray47", size = 0.2) }
+
+ggsave(rasterized.prob.map, file = "figures/map_rasterized_prob.png", width = 10, height = 8)
+
+# Top Adresse
+# topvalues = xyFromCell(rasterized, cell = match(tail(sort(values(rasterized)), 5), values(rasterized)))
+
 #---------- END DATA PREPARATION ----------#
 #---------- START DATA VISUALIZATION ----------#
 
@@ -298,6 +396,11 @@ inTrain <- createDataPartition(y = data$Citation, p = .9, list = FALSE)
 
 training_data <- data[ inTrain,] ## 90% of original data
 test_data  <- data[-inTrain,]
+
+model_glm <- train (Citation ~ Category, data = training_data, method = "glm")
+model_glm
+data_prediction <- predict(model_glm, test_data)
+confusionMatrix(data_prediction, test_data$Citation)
 
 #---------- END MODEL PLANNING ----------#
 
