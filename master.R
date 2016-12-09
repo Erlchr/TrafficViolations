@@ -249,6 +249,45 @@ barplot(table(dataFiltered$Year),col="slategray2",border="black",
         ylab="Frequency of Traffic Violations",
         ylim=c(0,10000))
 
+
+#------------------ PIE CHARTS BEGIN-----------
+#Pie diagram about the RACE of the people 
+#Calculate the percentage for each race, using one decimal place.
+percentLabelRace <- round(100*(table(data$Race))/sum((table(data$Race))), 1)
+#Add a new line after the names of each gender 
+nameLabelRace <- paste(names(table(data$Race)), "\n", sep="")
+raceAddPercentage <- paste(nameLabelRace, percentLabelRace , sep="")
+#Add a ‘%’ sign to each percentage value using the paste command.
+pieLabelRace <- paste(raceAddPercentage, "%", sep="")
+# Print the pie chart
+pie((table(data$Race)), labels=pieLabelRace, cex = 1.7, radius = 0.8, family="serif")
+
+#Pie diagram about the GENDER of the people 
+#Calculate the percentage for each gender, using one decimal place.
+percentLabelGender <- round(100*(table(data$Gender))/sum((table(data$Gender))), 1)
+#Add a new line after the name of each gender 
+nameLabelGender <- paste(names(table(data$Gender)), "\n", sep="")
+genderAddPercentage <- paste(nameLabelGender, percentLabelGender , sep="")
+#Add a ‘%’ sign to each percentage value using the paste command.
+pieLabelGender <- paste(genderAddPercentage, "%", sep="")
+# Print the pie chart
+pie((table(data$Gender)), labels=pieLabelGender, cex = 1.7, radius = 0.8, family="serif")
+
+# http://www.census.gov/quickfacts/table/PST045215/24
+# Maryland Population considering race
+populationRace <- c(6.5, 30.5, 9.5, 1.5, 52)
+pie(populationRace, labels=c("ASIAN\n 6.5%", "BLACK\n 30.5%", "HISPANIC\n 9.5%",
+                             "OTHER\n 1.5%", "WHITE\n 52%"), cex = 1.7, radius = 0.8, family="serif")
+
+# Pie diagram about the the people if they are Tourists or Locals
+# Calculate the percentage for each local, using one decimal place.
+#percentLabelLocal <- round(100*(table(data$Local))/sum((table(data$Local))), 1)
+# Print the pie chart
+#pie((table(data$Local)), labels=c(sprintf("Tourists\n %s %%", percentLabelLocal[1]), sprintf("Locals\n %s %%", percentLabelLocal[2])), cex = 1.7, radius = 0.8, family="serif")
+
+#------------------ PIE CHARTS END-----------
+
+
 #---------- END DATA VISUALIZATION ----------#
 
 #---------- START MODEL PLANNING ----------#
