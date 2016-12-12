@@ -1,6 +1,6 @@
 # Libraries
 library(devtools)
-install_version("ggplot2", version = "2.1.0", repos = "http://cran.us.r-project.org")
+#install_version("ggplot2", version = "2.1.0", repos = "http://cran.us.r-project.org")
 
 library(sp)
 library(raster)
@@ -11,13 +11,18 @@ library(ggplot2)
 library(utils)
 library(lubridate)
 library(chron) # Date
-library(caret)
 library(MASS)
 library(rpart)
 library(rpart.plot)
 library(stringdist)
 library(lattice)
 library(caret)
+
+library(survival)
+library(splines)
+library(parallel)
+library(gbm)
+
 
 # File Names
 dataCSVFileName = "traffic_violations.csv"
@@ -285,7 +290,8 @@ for (description in unique(data$Description)) {
   data$DescriptionProb[data$Description == description] = valueProb 
 }
 
-data$DescriptionProb = ordered(data$DescriptionProb, levels=c("very low", "low", "high", "very high"))
+data$DescriptionProb_ordered = ordered(data$DescriptionProb, levels=c("very low", "low", "high", "very high"))
+data$DescriptionProb = as.factor(data$DescriptionProb)
 
 # Change the Description probabilities if other columns imply a citation - very low -> high;  low -> very high
 for (rowIndex in 1:nrow(data)) {
@@ -530,6 +536,9 @@ remove(topvalues.addresses)
 remove(map.topvalues)
 remove(data.coords)
 
+str(data)
+saveRDS(data, "data.rds")
+data <- readRDS("data.rds")
 
 #--------------------------------------#
 #----------- MODEL PLANNING -----------#
