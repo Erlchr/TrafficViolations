@@ -100,13 +100,14 @@ observation.data.race.population.labels = c("ASIAN\n 6.5%", "BLACK\n 30.5%", "HI
 pie(c(6.5, 30.5, 9.5, 1.5, 52), labels = observation.data.race.population.labels, cex = 1.7, radius = 0.8, family="serif")
 
 remove(observation.data.race.population.labels)
+remove(observation.data)
 
-#--------------------------------------#
 #---------- DATA PREPARATION ----------#
 
 # Update Column Violation.Type to Citation
 names(data)[names(data) == "Violation.Type"] = "Citation"
-data$Citation = ordered(ifelse(data$Citation == "Citation", "Yes", "No"), levels = c("No", "Yes"))
+data$Citation = ifelse(data$Citation == "Citation", "Yes", "No")
+data$Citation = as.factor(data$Citation)
 
 # Remove Rows with Latitude & Longitude
 data = filter(data, !is.na(data$Longitude), !is.na(data$Latitude))
@@ -126,35 +127,181 @@ create_map <- function(location = "Montgomery County", zoom = 10) {
   return(montgomery)
 }
 
+#-------UNIFYING DESCRIPTIONS BASED ON CHARGE-------
 
-# Add Category
-categories = c("Speed", "Red Lights", "License", "Registration", "Driving Failure", "Alcohol", "Electronic Device", "Unsafe Vehicle", "Wrong Way")
-data = mutate(data, Category = as.character(data$Description))  
+# store the different levels of charge
+levelsCharge = unique(data$Charge)
 
-data$Category = gsub("LIC.", "LICENSE", data$Category)
-data$Category = gsub("ZON", "ZONE", data$Category)
-data$Category = gsub("(VEHICLE|VEHICL|VEH)", "VEHICLE", data$Category)
-data$Category = gsub("HWY", "HIGHWAY", data$Category)
-data$Category = gsub("(REGISTRATION|REGISTR|REG.)", "REGISTRATION", data$Category)
-data$Category = gsub("REQUIR ", "REQUIRED", data$Category)
-data$Category = gsub("MOT ", "MOTOR", data$Category)
-data$Category = gsub("MSG.", "MESSAGE", data$Category)
-data$Category = gsub("PLATES", "PLATE", data$Category)
+# same charges have sometimes different descriptions
+# we unify the descriptions, so that a charge has always the same description
+for (charge in levelsCharge) {
+  data$Description[data$Charge == charge] = names(summary(filter(data, data$Charge == charge)$Description))[1]
+}
 
-data$Category = gsub(".*SPEED.*", "Speed", data$Category)
-data$Category = gsub(".*(ONE WAY|WRONG WAY).*", "Wrong Way", data$Category)
-data$Category = gsub(".*(RED LIGHTS|RED SIGNAL|RED TRAFFIC SIGNAL|STOP LIGHTS|FAILURE TO STOP|STOPLIGHT|STOP AT SIGN|REQUIRED STOP|STOP SIGN|STOP AT SIGN|RED ARROW).*", "Red Lights", data$Category)
-data$Category = gsub(".*(LICENSE|PERMIT DRIVING|UNAUTHORIZED).*", "License", data$Category)
-data$Category = gsub(".*(REGISTRATION|UNREGISTERED|PLATE).*", "Registration", data$Category)
-data$Category = gsub(".*(AGGRESSIVE|NEGLIGENT|RECKLESS|TURN|BACKING|IMPRUDENT|PEDESTRIAN|SOUND|NOIS(E|Y)|FAILURE OF DRIVER|DRIVER (FAILING|FAILURE)|VEHICLE.*TOO CLOSELY|OVERTAKEN|OFF ROADWAY|CARELESS|YIELD|LANE|IMPROPER ROAD POSITION|DRIVE RIGHT|YIELD RIGHT|RIGHT HALF|FOLLOWING VEHICLE CLOSER|PARKING|PARK).*", "Driving Failure", data$Category)
-data$Category = gsub(".*(ALCOHOL|DRUG).*", "Alcohol", data$Category)
-data$Category = gsub(".*(TELEPHONE|PHONE|(READING|WRITING) .* MESSAGE).*", "Electronic Device", data$Category)
-# data$Category = gsub(".*(TELEPHONE|EARPHONES|EARPLUGS|PHONE|(READING|WRITING) .* MESSAGE|HEADSET).*", "Electronic Device", data$Category)
-data$Category = gsub(".*(GLASS|LAMP|BELT|UNINSURED VEHICLE|LAMPS|HEADLIGHT|SUSPENSION|TAILLIGHT|DASH LIGHTS|EYE PROTECTION|SHOCKS|WHEEL|TURN SIGNALS|WINDSHIELD|UNSECURED LOADED VEHICLE|EXHAUST SYSTEM|WINDOW TINT|FAILURE OF VEHICLE|TIRES|MIRRORS|FENDERS|BUMPERS|HEADLIGHTS|BRAKING|REFLECTOR|UNSAFE VEHICLE|EQUIPMENT|TAG LIGHTS|TAILLIGHTS|EQUIP|BRAKE).*", "Unsafe Vehicle", data$Category)
+data$Description = droplevels(data$Description)
 
-data$Category = as.factor(ifelse(data$Category %in% categories, data$Category, "Other"))
+remove(levelsCharge)
 
-remove(categories)
+
+# Cleaning the descriptions more 
+data$Description = gsub(" LIC.", "LICENSE", data$Description)
+data$Description = gsub("ZON ", "ZONE", data$Description)
+data$Description = gsub("(VEHICLE|VEHICL|VEH)", "VEHICLE", data$Description)
+data$Description = gsub("HWY", "HIGHWAY", data$Description)
+data$Description = gsub("(REGISTRATION|REGISTR|REG)", "REGISTRATION", data$Description)
+data$Description = gsub("REQUIR ", "REQUIRED", data$Description)
+data$Description = gsub("MOT ", "MOTOR", data$Description)
+data$Description = gsub("MSG.", "MESSAGE", data$Description)
+data$Description = gsub("(MOTOR|MOT) ", "MOTOR", data$Description)
+data$Description = gsub("PLATES", "PLATE", data$Description)
+data$Description = gsub("(UNSAFE|UNSAF)", "UNSAFE", data$Description)
+data$Description = gsub("(DRIVING|DRIVEN|DRIVER)", "DRIVE", data$Description)
+data$Description = gsub("PROPERTI", "PROPERTY", data$Description)
+data$Description = gsub("(DEVICE|DEVIC)", "DEVICE", data$Description)
+data$Description = gsub("(LICENSEE|LICENSE|LICENS|LIC)", "LICENSE", data$Description)
+
+#-------UNIFYING DESCRIPTIONS BASED ON CHARGE-------
+
+
+#-------------- ANALYZING THE SIMILARITIES BETWEEN CHARGES AND DESCRIPTIONS --------------- 
+descrData = select(data, Description, Personal.Injury, Property.Damage, Alcohol, Citation, Charge, Contributed.To.Accident)
+
+descrCit = filter(descrData, descrData$Citation == "Yes")
+descrNoCit = filter(descrData, descrData$Citation == "No")
+
+# Descriptions of the most Charges - take the first 35 descriptions
+chargeCit = head(names(summary(descrCit$Charge)), 35)
+chargeNoCit = head(names(summary(descrNoCit$Charge)), 35)
+
+# Common charges which appear when citation doesn't matter
+commonCharge = intersect(chargeCit, chargeNoCit)
+
+# only the charges which leads always to citation
+bestChargeCit = chargeCit[!chargeCit %in% commonCharge]
+
+#-------------- ANALYZING THE SIMILARITIES BETWEEN CHARGES AND DESCRIPTIONS --------------- 
+
+#------------------- CORPUS CLEANING ----------------------------
+
+corpusCit <- Corpus(VectorSource(descrCit$Description))
+corpusNoCit <- Corpus(VectorSource(descrNoCit$Description))
+
+corpusCit <- tm_map(corpusCit, tolower)
+corpusCit <- tm_map(corpusCit, removePunctuation)
+corpusCit <- tm_map(corpusCit, removeWords, stopwords("english"))
+corpusCit <- tm_map(corpusCit, stripWhitespace)  
+corpusCit <- tm_map(corpusCit, stemDocument)
+corpusCit <- tm_map(corpusCit, removeNumbers)
+
+corpusNoCit <- tm_map(corpusNoCit, tolower)
+corpusNoCit <- tm_map(corpusNoCit, removePunctuation)
+corpusNoCit <- tm_map(corpusNoCit, removeWords, stopwords("english"))
+corpusNoCit <- tm_map(corpusNoCit, stripWhitespace)  
+corpusNoCit <- tm_map(corpusNoCit, stemDocument)
+corpusNoCit <- tm_map(corpusNoCit, removeNumbers)
+
+
+#tell R to treat processed documents as text
+corpusCit <- tm_map(corpusCit, PlainTextDocument)
+corpusNoCit <- tm_map(corpusNoCit, PlainTextDocument)   
+
+#create  document term matrix 
+dtmCit = DocumentTermMatrix(corpusCit)
+dtmNoCit = DocumentTermMatrix(corpusNoCit)
+
+#lets trim down and remove terms
+#remove words that are over 99% sparse (i.e., do not appear in 98% of documents)
+dtmCit = removeSparseTerms(dtmCit, 0.997)
+dtmNoCit = removeSparseTerms(dtmNoCit, 0.997)
+
+dtm_df <- data.frame(as.matrix(dtm))
+head(dtm_df)
+
+
+cit = colSums(as.matrix(dtmCit))
+cit = subset(cit, cit >= 1500)
+v <- sort(cit, decreasing=TRUE)
+word.freqCit <- data.frame(term = names(v),freq=v)
+word.freqCit #lets see frequency of words
+
+
+library(ggplot2)
+ggplot(word.freqCit, aes(x = term, y = freq)) + geom_bar(stat = "identity") +
+  xlab("Terms") + ylab("Count") + coord_flip()
+
+
+#lets make a bar chart of frequent words
+barplot(word.freqCit[1:15,]$freq, las = 2, names.arg = word.freqCit[1:15,]$term,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+
+
+# colors
+pal <- brewer.pal(9, "BuGn")
+pal <- pal[-(1:4)]
+# plot word cloud
+wordcloud(words = names(v), freq = v, min.freq = 3,
+          random.order = F, colors = pal)
+
+noCit = colSums(as.matrix(dtmNoCit))
+noCit = subset(noCit, noCit >= 1500)
+w <- sort(noCit, decreasing=TRUE)
+word.freqNoCit <- data.frame(term = names(w),freq=w)
+word.freqNoCit #lets see frequency of words
+
+
+library(ggplot2)
+ggplot(word.freqNoCit, aes(x = term, y = freq)) + geom_bar(stat = "identity") +
+  xlab("Terms") + ylab("Count") + coord_flip()
+
+
+#lets make a bar chart of frequent words
+barplot(word.freqNoCit[1:15,]$freq, las = 2, names.arg = word.freqNoCit[1:15,]$term,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+
+# colors
+pal <- brewer.pal(9, "BuGn")
+pal <- pal[-(1:4)]
+# plot word cloud
+wordcloud(words = names(w), freq = w, min.freq = 3,
+          random.order = F, colors = pal)
+
+
+remove(descrData, descrCit, descrNoCit, chargeCit, chargeNoCit, commonCharge, bestChargeCit)
+remove(word.freqNoCit, word.freqCit, charge, cit, corpusNoCit, corpusCit, dtmNoCit, dtmCit, noCit, pal, v, w)
+
+#------------------- CORPUS CLEANING ----------------------------
+
+# Adding a new column which tells us the probability if a particular description leads to a citation
+for (description in unique(data$Description)) {
+  total =  filter(data, data$Description == description)
+  citations = filter(total, total$Citation == "Yes")
+  percentage = (nrow(citations) / nrow(total))
+  
+  valueProb <- ifelse(percentage < 0.25 , "very low",
+                      ifelse(percentage < 0.5, "low",
+                             ifelse(percentage < 0.75, "high", "very high")))
+  data$DescriptionProb[data$Description == description] = valueProb 
+}
+
+data$DescriptionProb = ordered(data$DescriptionProb, levels=c("very low", "low", "high", "very high"))
+
+# Change the Description probabilities if other columns imply a citation - very low -> high;  low -> very high
+for (rowIndex in 1:nrow(data)) {
+  row = data[rowIndex, ]
+  if (row$Property.Damage == "Yes" | row$Personal.Injury == "Yes" | row$Fatal == "Yes" | row$Alcohol == "Yes" | row$Contributed.To.Accident == "Yes") {
+    if (row$DescriptionProb == "very low") {
+      data$DescriptionProb[rowIndex] = "high"
+    } else if (row$DescriptionProb == "low") {
+      data$DescriptionProb[rowIndex] = "very high"
+    }
+  }
+}
+
+remove(charge, description, rowIndex, total, citations, percentage, valueProb, row)
+
+
 
 # Remove redundant location information
 # Remove columns which has always the same value like "Agency = MCP" in each row of data
