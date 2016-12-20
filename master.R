@@ -18,12 +18,6 @@ library(stringdist)
 library(lattice)
 library(caret)
 
-library(survival)
-library(splines)
-library(parallel)
-library(gbm)
-
-
 # File Names
 dataCSVFileName = "traffic_violations.csv"
 dataRDSFileName = "traffic_violations.rds"
@@ -147,7 +141,6 @@ data$Description = droplevels(data$Description)
 
 remove(levelsCharge)
 
-
 # Cleaning the descriptions more 
 data$Description = gsub(" LIC.", "LICENSE", data$Description)
 data$Description = gsub("ZON ", "ZONE", data$Description)
@@ -222,13 +215,11 @@ dtmNoCit = removeSparseTerms(dtmNoCit, 0.997)
 dtm_df <- data.frame(as.matrix(dtm))
 head(dtm_df)
 
-
 cit = colSums(as.matrix(dtmCit))
 cit = subset(cit, cit >= 1500)
 v <- sort(cit, decreasing=TRUE)
 word.freqCit <- data.frame(term = names(v),freq=v)
 word.freqCit #lets see frequency of words
-
 
 library(ggplot2)
 ggplot(word.freqCit, aes(x = term, y = freq)) + geom_bar(stat = "identity") +
@@ -239,7 +230,6 @@ ggplot(word.freqCit, aes(x = term, y = freq)) + geom_bar(stat = "identity") +
 barplot(word.freqCit[1:15,]$freq, las = 2, names.arg = word.freqCit[1:15,]$term,
         col ="lightblue", main ="Most frequent words",
         ylab = "Word frequencies")
-
 
 # colors
 pal <- brewer.pal(9, "BuGn")
@@ -253,7 +243,6 @@ noCit = subset(noCit, noCit >= 1500)
 w <- sort(noCit, decreasing=TRUE)
 word.freqNoCit <- data.frame(term = names(w),freq=w)
 word.freqNoCit #lets see frequency of words
-
 
 library(ggplot2)
 ggplot(word.freqNoCit, aes(x = term, y = freq)) + geom_bar(stat = "identity") +
@@ -271,7 +260,6 @@ pal <- pal[-(1:4)]
 # plot word cloud
 wordcloud(words = names(w), freq = w, min.freq = 3,
           random.order = F, colors = pal)
-
 
 remove(descrData, descrCit, descrNoCit, chargeCit, chargeNoCit, commonCharge, bestChargeCit)
 remove(word.freqNoCit, word.freqCit, charge, cit, corpusNoCit, corpusCit, dtmNoCit, dtmCit, noCit, pal, v, w)
@@ -306,8 +294,6 @@ for (rowIndex in 1:nrow(data)) {
 }
 
 remove(charge, description, rowIndex, total, citations, percentage, valueProb, row)
-
-
 
 # Remove redundant location information
 # Remove columns which has always the same value like "Agency = MCP" in each row of data
@@ -478,7 +464,7 @@ remove(k)
 # 2) Create Raster and rasterize the created Frame
 # 3) Add Maryland Border Layer 
 # 4) Plot
-rastered = raster(ncol=100, nrow=100, xmn=-77.52, xmx=-76.9, ymn=38.93, ymx=39.35)
+rastered = raster(ncol=100, nrow=1000, xmn=-77.52, xmx=-76.9, ymn=38.93, ymx=39.35)
 
 rasterized = rasterize(data.coords[,1:2], rastered, 1, fun = sum)
 
@@ -543,62 +529,224 @@ data <- readRDS("data.rds")
 #--------------------------------------#
 #----------- MODEL PLANNING -----------#
 
+#identify variables with near or zero variance
+nzv <- nearZeroVar(data, saveMetrics= TRUE) #saving metrics to view variable details
+nzv[nzv$nzv,][1:16,]
+
+nzv <- nearZeroVar(data) #no metrics just return identified columns indexes
+nzv
+
+#remove or filter columns with nearZeroVar
+filteredDescr <- data[, -nzv]
+dim(filteredDescr) 
+
+##remove highly correlated variables
+
+#first create correlation matrix of variables
+descrCor <-  cor(filteredDescr)
+
+#summarize the correlations some very high correlations
+summary(descrCor[upper.tri(descrCor)])
+
+#identified variables with correlation .75 or higher
+highlyCorDescr <- findCorrelation(descrCor, cutoff = .75)
+highlyCorDescr
+
+#filter out these variables from dataset
+data <- filteredDescr[,-highlyCorDescr]
+
+#creaet new correlation matrix to verify
+descrCor2 <- cor(filteredDescr)
+summary(descrCor2[upper.tri(descrCor2)]) #no correlations greater than .75
+
+#the dummyVars object is used with predict function to create new data frame of dummy variables
+#excluding the response factor Citation (column 17)
+data.dummy <- data.frame(predict(dummyVars("~ .", data=data[-17], fullRank=TRUE), newdata=data))
+
+#add the response factor to the dummy variable training and test sets 
+data.dummy <-cbind(Citation=data$Citation,data.dummy)
+
+# 
 #--------------------------------------#
 #----------- MODEL BUILDING -----------#
 
 set.seed(107)
-inTrain <- createDataPartition(y = data$Citation, p = .9, list = FALSE)
 
-training_data <- data[ inTrain,] ## 90% of original data
-test_data  <- data[-inTrain,]
+#create training 
+inTrain<-createDataPartition(y=data$Citation, p=.8, list=FALSE)
 
+#create seperate test and training sets
+
+#Perserve class distribution and split 80% and 20% subsets
+inTrain <- createDataPartition(data$Citation, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+#create training set subset (80%)
+data.train <- data[ inTrain,]
+
+#create training set subset (20%)
+data.test  <- data[-inTrain,]
+
+table(data.train$Citation)
+table(data.test$Citation)
+
+str(data.train)
+data.train$DescriptionProb_Num <- ifelse(data.train$DescriptionProb == "very low", 1,
+                          ifelse(data.train$DescriptionProb == "low", 2,
+                                 ifelse(data.train$DescriptionProb == "high", 3,4)))
+
+
+#######################################################
+# Linear Regression Model
+#######################################################
+#********** START *********#
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=2,
+                     classProbs=TRUE,
+                     summaryFunction = twoClassSummary #multiClassSummary for non binar
+)
+
+model_glm = train(Citation ~ HighProb_Num + DescriptionProb + Race +  Gender, data=data.train, method="glm", trControl=ctrl, metric="ROC")
+predictions <- predict(model_glm, newdata = data.test)
+predictions
+confusionMatrix(predictions, data.test$Citation)
+# --> Accuracy : 0.775 
+#********** END ***********#
+
+#######################################################
+# Rpart
+#######################################################
+#******** START ***********#
+#some parameters to control the sampling during parameter tuning and testing
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=2,
+                     classProbs=TRUE,
+                     #function used to measure performance
+                     summaryFunction = twoClassSummary, #multiClassSummary for non binary
+                     allowParallel = TRUE)
+library(rpart)
+#to see what parameters are to be tuned:
+modelLookup("rpart")
+model_rpart <- train(Citation ~ HighProb_Num + DescriptionProb + Race +  Gender, 
+                 trControl = ctrl,
+                 metric = "ROC", #using AUC to find best performing parameters
+                 preProc = c("range", "nzv"), #scale from 0 to 1 and from columns with zero variance
+                 data = data.train, 
+                 method = "rpart")
+model_rpart
+
+#plot the performance of different parameters affect on ROC
+plot(model_rpart)
+
+#the best performing model trained on the full training set is saved 
+##preprocessing using predict function with caret train object will be applied to new data
+p.rpart <- predict(model_rpart,data.test)
+confusionMatrix(p.rpart,data.test$Citation)
+# ****** Accuracy : 0.7514  
+
+#lets try a larger search of parameters tuneLength
+model_rpart.8 <- train(Citation ~ HighProb_Num + DescriptionProb_Num, 
+                   trControl = ctrl,
+                   metric = "ROC", #using AUC to find best performing parameters
+                   preProc = c("range", "nzv"), #scale from 0 to 1 and from columns with zero variance
+                   data = data.train, 
+                   tuneLength=8,
+                   method = "rpart")
+model_rpart.8
+plot(model_rpart.8)
+
+#the best performing model trained on the full training set is saved 
+##preprocessing using predict function with caret train object will be applied to new data
+p.rpart.8 <- predict(model_rpart.8,data.test)
+confusionMatrix(p.rpart.8,data.test$Citation)
+# ****** --> Accuracy : 0.7739        
+#******** END ***********#
+
+#######################################################
+# Neural Network
+#######################################################
+#******** START ***********#
+modelLookup("nnet")
+model_nnet <- train(Citation ~ DescriptionProb + HighProb_Num + Race + Gender, 
+                trControl = ctrl,
+                metric = "ROC", #using AUC to find best performing parameters
+                preProc = c("range", "nzv"), #scale from 0 to 1 and from columns with zero variance
+                data = data.train,#credit.dummy.train, 
+                method = "nnet", 
+                na.action=na.exclude)
+model_nnet
+p.nnet <- predict(model_nnet,data.test)
+confusionMatrix(p.nnet,data.test$Citation)
+#******** END ***********#
+
+#######################################################
+# Random Forest
+#######################################################
+#******** START ***********#
+str(data)
+library(randomForest)
+trControl = trainControl (method = "repeatedcv", number=10, repeats = 3, classProbs=TRUE, savePredictions = TRUE)
+model_rf <- train (Citation ~ HighProb_Num + DescriptionProb + Race +  Gender, 
+                   data = data.train,
+                   method = "rf"	,
+                   trControl = trControl, metric="Accuracy")
+model_rf
+prediction_rf = predict(model_rf, data.test)
+confusionMatrix(prediction_rf, data.test$Citation)
+postResample(prediction_rf, data.test$Citation)
+
+data.test$Citation <- predict(model_rf, newdata = data.test)
+summary(test_data)
+
+#Plotting ROC Curve
+result.predicted.prob <- predict(model_rf, data.test, type="prob") # Prediction
+
+result.roc <- roc(data.test$Citation, result.predicted.prob$Yes) # Draw ROC curve.
+plot(result.roc)
+
+library(randomForest)
+model_rf = train(Citation ~ HighProb_Num + DescriptionProb + Race +  Gender, data=data.train, method="rf", metric="ROC" )
+saveRDS(model_rf, "model_rf.rds")
+model_rf <- readRDS("model_rf.rds")
+prediction_rf = predict(model_rf, test_data)
+confusionMatrix(prediction_rf, test_data$Citation)
+#******** END ***********#
+
+#######################################################
+# Support Vector Machine
+#######################################################
+#******** START ***********#
 library("doParallel")
-library(pROC)
 
+#Register core backend, using 4 cores
 cl <- makeCluster(4)
 registerDoParallel(cl)
 
-ctrl = trainControl(method="repeatedcv", number=5, repeats=2, summaryFunction = twoClassSummary, classProbs = TRUE)
+#list number of workers
+getDoParWorkers()
 
-model = as.formula(Citation ~ prob) 
-model_glm = train(model, data=training_data, method="glm", trControl=ctrl, metric="Accuracy")
-model_glm <- train (model, data = training_data, method = "glm", metric="Accuracy", trControl=ctrl)
-model_rf <- train (model, data = training_data, method = "rf")
-model_svm <- train (model, data = training_data, method = "svmRadial")
-model_tree <- train (model, data = training_data, method = "class")
+##svm with radial kernel
+modelLookup("svmRadial")
+model_svm <- train(letter~ ., 
+               trControl = ctrl,
+               metric = "Accuracy", #using AUC to find best performing parameters
+               preProc = c("range"), #scale from 0 to 1
+               data = letters_train, 
+               method = "svmRadial")
 
-saveRDS(model_glm, "model_glm.rds")
-saveRDS(model_rf, "model_rf.rds")
-saveRDS(model_svm, "model_svm.rds")
-saveRDS(model_tree, "model_tree.rds")
+#save train model to file to avoid very lengthy train time
+saveRDS(model_svm, "letermodel-svmRadialCaretTrain.rds")
 
-model_glm <- readRDS("model_glm.rds")
-model_rf <- readRDS("model_rf.rds")
-model_svm <- readRDS("model_svm.rds")
-model_tree <- readRDS("model_tree.rds")
-
-prediction_glm = predict(model_glm, test_data)
-prediction_rf = predict(model_rf, test_data)
-prediction_svm = predict(model_svm, test_data)
-prediction_tree = predict(model_tree, test_data)
-
-confusionMatrix(prediction_glm, test_data$Citation)
-confusionMatrix(prediction_rf, test_data$Citation)
-confusionMatrix(prediction_svm, test_data$Citation)
-confusionMatrix(prediction_tree, test_data$Citation)
-
+#read train model from file
+model_svm<-readRDS("letermodel-svmRadialCaretTrain.rds")
+plot(model_svm)
 stopCluster(cl)
+#******** END ***********#
 
-remove(cl)
-remove(model)
-remove(ctrl)
-remove(model_glm)
-remove(model_rf)
-remove(model_svm)
-remove(model_tree)
-remove(prediction_glm)
-remove(prediction_rf)
-remove(prediction_svm)
-remove(prediction_tree)
+#compare the performance of all models trained today
+rValues <- resamples(list(rpart=model_rpart.8, nnet=model_nnet, svm=model_svm, rf=model_rf, glm=model_glm))
+
+bwplot(rValues, metric="ROC")
+bwplot(rValues, metric="Sens") #Sensitvity
+bwplot(rValues, metric="Spec")
 
 #--------------------------------------#
